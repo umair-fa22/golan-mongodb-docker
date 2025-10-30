@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Inventory Manager</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Inventory Manager</h1>
+
+    <!-- ADD FORM -->
+    <div class="form">
+      <input type="text" id="name" placeholder="Item Name" />
+      <input type="number" id="unitPrice" placeholder="Unit Price" step="0.01" min="0" />
+      <input type="number" id="quantity" placeholder="Quantity" min="0" value="1" />
+      <button onclick="createItem()">Add Item</button>
+    </div>
+
+    <!-- TOTAL -->
+    <div class="summary">
+      <strong>Total Value: $<span id="totalSum">0.00</span></strong>
+    </div>
+
+    <!-- LIST -->
+    <ul id="items"></ul>
+  </div>
+
+  <script>
+    const API = '/api/items';
+
+    /* ---------- HELPERS ---------- */
+    function calcTotal(items) {
+      return items.reduce((s, i) => s + i.unitPrice * i.quantity, 0).toFixed(2);
+    }
+
+    function updateTotal(items) {
+      document.getElementById('totalSum').textContent = calcTotal(items);
+    }
+
+    /* ---------- RENDER ---------- */
+function renderItem(item, items) {
+  const li = document.createElement('li');
+  li.dataset.id = item.id;
+
+  const total = (item.unitPrice * item.quantity).toFixed(2);
+
+  li.innerHTML = `
+    <div class="item-info">
+      <!-- NAME -->
+      <strong class="name view">${item.name}</strong>
+      <input class="name edit" type="text" value="${item.name}" style="display:none">
+
+      <!-- PRICE DISPLAY -->
+      <div class="price-display view">
+        <span class="unit">$${item.unitPrice.toFixed(2)} × ${item.quantity}</span>
+        <span class="total">= $${total}</span>
+      </div>
+
+      <!-- PRICE EDITOR -->
+      <div class="price-edit edit" style="display:none">
+        <div class="price-input-group">
+          $<input type="number" class="unit-price-input" step="0.01" min="0" value="${item.unitPrice}">
+          <span class="multiplier">×</span>
+          <input type="number" class="quantity-input" min="0" value="${item.quantity}">
+          <span class="live-total">= $${total}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW ACTIONS -->
+    <div class="actions view">
+      <button class="edit-btn">Edit</button>
+      <button class="delete-btn">Delete</button>
+    </div>
+
+    <!-- EDIT ACTIONS -->
+    <div class="actions edit" style="display:none">
+      <button class="save-btn">Save</button>
+      <button class="cancel-btn">Cancel</button>
+    </div>
+  `;
+
+  /* ---- EDIT → VIEW toggle (unchanged) ---- */
+  li.querySelector('.edit-btn').onclick = () => {
+    li.classList.add('editing');
+    li.querySelectorAll('.view').forEach(el => el.style.display = 'none');
+    li.querySelectorAll('.edit').forEach(el => el.style.display = 'block');
+    li.querySelectorAll('.actions.view').forEach(el => el.style.display = 'none');
+    li.querySelectorAll('.actions.edit').forEach(el => el.style.display = 'flex');
+  };
+
+  li.querySelector('.cancel-btn').onclick = () => {
+    li.classList.remove('editing');
+    li.querySelectorAll('.view').forEach(el => el.style.display = '');
+    li.querySelectorAll('.edit').forEach(el => el.style.display = 'none');
+    li.querySelectorAll('.actions.view').forEach(el => el.style.display = '');
+    li.querySelectorAll('.actions.edit').forEach(el => el.style.display = 'none');
+
+    // reset to original values
+    li.querySelector('.edit.name').value = item.name;
+    li.querySelector('.unit-price-input').value = item.unitPrice;
+    li.querySelector('.quantity-input').value = item.quantity;
+  };
+
+  /* ---- SAVE ---- */
+  li.querySelector('.save-btn').onclick = async () => {
+    const newName = li.querySelector('.edit.name').value.trim();
+    const newUP   = parseFloat(li.querySelector('.unit-price-input').value);
+    const newQty  = parseInt(li.querySelector('.quantity-input').value);
+
+    if (!newName || isNaN(newUP) || isNaN(newQty) || newUP < 0 || newQty < 0) {
+      alert('Please fill all fields correctly');
+      return;
+    }
+
+    const payload = { name: newName, unitPrice: newUP, quantity: newQty };
+    const res = await fetch(`${API}/${item.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      item.name = newName;
+      item.unitPrice = newUP;
+      item.quantity = newQty;
+      renderItems(items);
+    } else {
+      alert('Save failed');
+    }
+  };
+
+  li.querySelectorAll('.edit input').forEach(inp => {
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') li.querySelector('.save-btn').click();
+    if (e.key === 'Escape') li.querySelector('.cancel-btn').click();
+  });
+});
+
+  /* ---- DELETE ---- */
+  li.querySelector('.delete-btn').onclick = async () => {
+    if (confirm('Delete this item?')) {
+      await fetch(`${API}/${item.id}`, { method: 'DELETE' });
+      loadItems();
+    }
+  };
+
+
+  /* ---- LIVE LINE TOTAL ---- */
+  const updateLine = () => {
+    const up = parseFloat(li.querySelector('.unit-price-input').value) || 0;
+    const qty = parseInt(li.querySelector('.quantity-input').value) || 0;
+    li.querySelector('.live-total').textContent = `= $${(up * qty).toFixed(2)}`;
+  };
+  li.querySelector('.unit-price-input').oninput = updateLine;
+  li.querySelector('.quantity-input').oninput = updateLine;
+
+  return li;
+}
+
+    function renderItems(items) {
+      const ul = document.getElementById('items');
+      ul.innerHTML = '';
+      items.forEach(it => ul.appendChild(renderItem(it, items)));
+      updateTotal(items);
+    }
+
+    /* ---------- API CALLS ---------- */
+    async function loadItems() {
+      try {
+        const res = await fetch(API);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch items: ${res.status} ${res.statusText}`);
+        }
+        const items = await res.json();
+        renderItems(items);
+      } catch (error) {
+        console.error('Error loading items:', error);
+        // Display empty list on error, but log the issue
+        renderItems([]);
+      }
+    }
+
+    async function createItem() {
+      const name = document.getElementById('name').value.trim();
+      const unitPrice = parseFloat(document.getElementById('unitPrice').value);
+      const quantity = parseInt(document.getElementById('quantity').value);
+
+      if (!name || isNaN(unitPrice) || isNaN(quantity) || unitPrice < 0 || quantity < 0) {
+        return alert('Please fill all fields correctly');
+      }
+
+      try {
+        const res = await fetch(API, {  
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, unitPrice, quantity })
+        });
+
+        if (!res.ok) {
+          const error = await res.text();
+          throw new Error(`Failed to create item: ${error}`);
+        }
+
+        document.getElementById('name').value = '';
+        document.getElementById('unitPrice').value = '';
+        document.getElementById('quantity').value = '1';
+        loadItems();
+      } catch (error) {
+        console.error('Error creating item:', error);
+        alert('Failed to create item. Please try again.');
+      }
+    }
+
+    /* ---------- INIT ---------- */
+    loadItems();
+  </script>
+</body>
+</html>
