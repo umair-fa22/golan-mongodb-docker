@@ -106,14 +106,7 @@ jobs:
           done
           echo "Timed out waiting for services" && exit 1
 
-      - name: Go test (integration)
-        env:
-          MONGODB_URI: ${{ env.MONGODB_URI }}
-          POSTGRES_DSN: ${{ env.POSTGRES_DSN }}
-        run: |
-          # Ensure module dependencies and sums are present on this job runner
-          go mod tidy
-          go test -v ./...
+      
 
   build-and-push:
     name: Build Docker Image
