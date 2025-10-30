@@ -84,9 +84,10 @@ jobs:
           POSTGRES_DB: testdb
         ports:
           - 5432:5432
+    # Use localhost + mapped ports for service reachability to avoid DNS resolution issues
     env:
-      MONGODB_URI: mongodb://mongo:27017
-      POSTGRES_DSN: host=postgres user=postgres password=postgres dbname=testdb sslmode=disable
+      MONGODB_URI: mongodb://localhost:27017
+      
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,11 +97,12 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Wait for services
+      - name: Wait for services (localhost mapped ports)
         run: |
-          # give services a little time to be ready
-          for i in {1..20}; do
-            nc -z mongo 27017 && nc -z postgres 5432 && echo "services ready" && exit 0 || sleep 1
+          # Wait for MongoDB on localhost:27017 and Postgres on localhost:5432
+          for i in {1..60}; do
+            # Use bash /dev/tcp to check port reachability; avoids dependency on 'nc'
+            (echo > /dev/tcp/localhost/27017) >/dev/null 2>&1 && (echo > /dev/tcp/localhost/5432) >/dev/null 2>&1 && echo "services ready" && exit 0 || sleep 1
           done
           echo "Timed out waiting for services" && exit 1
 
