@@ -91,7 +91,17 @@ func main() {
 
 	// === START SERVER ===
 	log.Printf("Server starting on :%s", port)
-	r.Run(":" + port)
+
+	// "try/catch" style: recover from panics and handle Run error
+	defer func() {
+		if rec := recover(); rec != nil {
+			log.Printf("Recovered from panic while starting server: %v", rec)
+		}
+	}()
+
+	if err := r.Run(":" + port); err != nil {
+		log.Fatalf("Server failed to start: %v", err)
+	}
 }
 
 // === REST OF YOUR CRUD HANDLERS (unchanged) ===
