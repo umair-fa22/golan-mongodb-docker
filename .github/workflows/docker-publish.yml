@@ -46,16 +46,26 @@ jobs:
 
       - name: Install gosec
         run: |
-          GOBIN=$GITHUB_WORKSPACE/.gobin
-          mkdir -p $GOBIN
-          export PATH=$GOBIN:$PATH
+          # Install gosec to the default install location. We'll resolve the actual binary path below.
           go install github.com/securego/gosec/v2/cmd/gosec@latest
 
       - name: Run gosec
         run: |
-          GOBIN=$GITHUB_WORKSPACE/.gobin
-          export PATH=$GOBIN:$PATH
-          $GOBIN/gosec ./...
+          # Determine where 'go install' placed the binary and run it.
+          GOBIN=$(go env GOBIN)
+          GOPATH=$(go env GOPATH)
+          if [ -n "$GOBIN" ]; then
+            BINPATH="$GOBIN/gosec"
+          else
+            BINPATH="$GOPATH/bin/gosec"
+          fi
+          echo "Running gosec from: $BINPATH"
+          if [ ! -x "$BINPATH" ]; then
+            echo "Error: gosec binary not found at $BINPATH"
+            ls -la "$(dirname $BINPATH)" || true
+            exit 1
+          fi
+          $BINPATH ./...
 
   test:
     name: Test (with DB services)
