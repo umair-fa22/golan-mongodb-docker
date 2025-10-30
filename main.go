@@ -34,11 +34,15 @@ func main() {
 	}
 
 	// === GET CONFIG ===
+	// Support either MONGODB_URI (preferred) or legacy MONGO_URI
 	uri := os.Getenv("MONGODB_URI")
-	println("MONGODB: ", uri, len(uri))
+	if uri == "" {
+		uri = os.Getenv("MONGO_URI")
+	}
+	log.Println("MONGODB_URI ->", uri)
 
 	if uri == "" {
-		log.Fatal("MONGODB_URI is required (set in .env or environment)")
+		log.Fatal("MONGODB_URI (or MONGO_URI) is required (set in .env or environment)")
 	}
 
 	port := os.Getenv("PORT")
@@ -88,6 +92,11 @@ func main() {
 		api.PUT("/items/:id", updateItem)
 		api.DELETE("/items/:id", deleteItem)
 	}
+
+	// Health endpoint for container orchestration and healthchecks
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
 
 	// === START SERVER ===
 	log.Printf("Server starting on :%s", port)

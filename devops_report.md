@@ -1,3 +1,83 @@
+# DevOps Report — golan-mongodb-docker
+
+Status: updated (2025-10-30)
+
+This document summarizes the project's DevOps choices, CI/CD pipeline design, runtime architecture, testing approach, security considerations and recommended next steps.
+
+## 1. Architecture overview
+
+- Backend: Go (Gin) application exposing a small CRUD REST API for `items`.
+- Database: MongoDB (primary). The repo includes a `docker-compose.yml` that runs both the backend and a `mongo:6.0` service for local development.
+- Packaging: multi-stage Dockerfile (build in golang image, produce a tiny runtime image).
+- CI: GitHub Actions workflow that builds, scans, tests (with DB services), builds and pushes Docker images.
+
+Runtime flow
+- The containerized backend reads `MONGODB_URI` from environment and connects to MongoDB. The compose setup sets `MONGODB_URI` to `mongodb://mongodb:27017/devopsdb` so the backend can connect to the named `mongodb` service on the compose network.
+
+## 2. Key pipeline items
+
+- build-install: `go mod download` + `go build` to ensure compilation.
+- security-scan: `gosec` installed via `go install` and executed in the runner (note: detect binary path via `go env GOBIN` or GOPATH/bin).
+- test: starts `mongo` and `postgres` as services and runs `go test` (integration tests live in `db_integration_test.go`).
+- build-and-push: `buildx` multi-arch Docker build and push to a registry.
+- deploy: placeholder in the workflow that runs only on `main` — replace with concrete deployment commands as needed.
+
+CI recommendations
+- Split tests by speed: run fast unit tests on PRs and run slow integration tests in a separate job.
+- Cache Go modules between runs to speed up build stages.
+- Fail the pipeline fast on compile errors (already implemented by build step).
+
+## 3. Observed runtime issue and fix
+
+- Symptom: backend started, connected to MongoDB, then panicked with `html/template: pattern matches no files: 'static/*.html'`, causing the service to crash and the Mongo client to log a disconnected operation.
+- Root cause: runtime Docker image originally only copied the binary and not the `static/` folder. `gin.Engine.LoadHTMLGlob("static/*.html")` panicked when templates were missing.
+- Fix applied: Dockerfile updated to copy `static/` from the builder into the runtime image. Alternative (recommended): embed `static/` into the Go binary using `embed` so the runtime image only needs the single binary.
+
+## 4. Security & secrets
+
+- Secrets in CI: use GitHub Actions repository secrets for `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` (or registry-specific tokens). Avoid printing secrets in logs.
+- Recommendation: use short-lived tokens where supported and rotate periodically.
+
+## 5. Testing
+
+- Integration tests: `db_integration_test.go` exercises MongoDB and Postgres connectivity and basic CRUD. Tests skip when env vars are absent, keeping `go test` usable locally without services.
+- Local testing recommendation: use `docker compose up -d mongodb` then run `MONGODB_URI="mongodb://localhost:27017" go test -v ./...`.
+
+## 6. Operational considerations
+
+- Healthchecks: runtime image includes an HTTP healthcheck that probes `/health`. Keep this endpoint lightweight and reliable.
+- Startup ordering: Docker Compose `depends_on` only controls start order, not readiness. Consider:
+  - Adding a readiness probe in the backend that waits for MongoDB before binding the HTTP listener.
+  - Using `wait-for` scripts or a small entrypoint that performs TCP/HTTP checks.
+- Data persistence: compose defines a named volume for MongoDB. For production, use managed DB or a replicated MongoDB cluster with backups.
+
+## 7. Monitoring and logging
+
+- Logging: backend uses standard library logging + Gin's logger. For production, forward logs to a centralized system (ELK, Loki, Cloud provider log service).
+- Metrics: instrument the app with Prometheus metrics (e.g., request durations, DB latencies) and expose `/metrics`.
+
+## 8. Backup & DR
+
+- For local dev no backups are required. For production:
+  - Use `mongodump` or managed provider snapshot features for backups.
+  - Define RTO/RPO targets and test restore procedures regularly.
+
+## 9. Scaling and deployment
+
+- For small scale you can run multiple backend replicas behind a load balancer; ensure the MongoDB deployment can handle connections (scale read replicas or use a managed cluster).
+- For robust deployment use Kubernetes and a Helm chart or use a managed service (Cloud Run, App Service) and managed MongoDB (Atlas, DocumentDB, CosmosDB, etc.).
+
+## 10. Actionable next steps (priority order)
+
+1. Embed `static/` into the binary using `embed` and remove the need to copy assets into the runtime image. This simplifies images and prevents missing-template panics.
+2. Add fast unit tests and separate integration tests in CI (PRs run unit tests; integration tests run in a scheduled or separate job).
+3. Add Prometheus metrics and a `/metrics` endpoint.
+4. Harden CI: add Trivy or another scanner to the pipeline for image vulnerability scans.
+5. If production is intended, add MongoDB authentication and a secure backup strategy; use a managed DB for operational simplicity.
+
+---
+
+If you want, I can implement suggested item #1 (embed static files) and update the Dockerfile so the runtime image is a single binary (no `static/` copies). I can also add the e2e test script that runs after `docker compose up --build` to exercise CRUD endpoints automatically.
 # DevOps Report
 
 This report documents the DevOps choices, pipeline design, secret management, testing approach, and lessons learned for the `golan-mongodb-docker` project.

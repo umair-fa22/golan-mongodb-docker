@@ -23,8 +23,14 @@ FROM alpine:3.20
 # Create working directory
 WORKDIR /app
 
+# Install runtime dependencies needed for healthcheck
+RUN apk add --no-cache ca-certificates wget
+
 # Copy the binary from builder
 COPY --from=builder /app/main .
+
+# Copy static assets (HTML/CSS) so Gin can load templates at runtime
+COPY --from=builder /app/static ./static
 
 # Expose backend port (change if your app uses another)
 EXPOSE 8080

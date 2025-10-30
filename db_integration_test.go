@@ -7,7 +7,6 @@ import (
     "testing"
     "time"
 
-    _ "github.com/lib/pq"
     "go.mongodb.org/mongo-driver/bson"
     "go.mongodb.org/mongo-driver/mongo"
     "go.mongodb.org/mongo-driver/mongo/options"
