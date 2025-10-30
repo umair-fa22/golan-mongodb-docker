@@ -32,6 +32,13 @@ COPY --from=builder /app/main .
 # Copy static assets (HTML/CSS) so Gin can load templates at runtime
 COPY --from=builder /app/static ./static
 
+# Copy a default .env into the runtime image so godotenv.Load() finds it.
+# This uses the `.env.example` file from the build context and creates a
+# runtime `.env`. If you want to include your real `.env`, add a
+# `COPY .env .` here (but avoid committing secrets to the repo).
+COPY --from=builder /app/.env.example .
+RUN cp .env.example .env || true
+
 # Expose backend port (change if your app uses another)
 EXPOSE 8080
 
@@ -39,6 +46,8 @@ EXPOSE 8080
 # Make sure your app has an endpoint like `/health` or `/ping`
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1
+
+
 
 # Run the binary
 CMD ["./main"]
