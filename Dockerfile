@@ -1,44 +1,38 @@
-# syntax=docker/dockerfile:1.6
+# ---------- Stage 1: Build ----------
+FROM golang:1.22-alpine AS builder
 
-# Stage 1: Build the Go binary
-FROM golang:1.24.9-alpine AS builder
+# Set working directory
 WORKDIR /app
 
-# Pre-cache modules
-COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
+# Install git for dependency fetching
+RUN apk add --no-cache git
 
-# Copy the rest of the source code
+# Copy go mod files and download dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy all project files
 COPY . .
 
-# Build a static binary
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache \
-    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /app/main .
+# Build Go binary (adjust main.go path if different)
+RUN go build -o main .
 
-# Stage 2: Minimal runtime image
+# ---------- Stage 2: Runtime ----------
 FROM alpine:3.20
+
+# Create working directory
 WORKDIR /app
 
-# If the app does HTTPS calls, you'll need CA certs
-RUN apk add --no-cache ca-certificates
+# Copy the binary from builder
+COPY --from=builder /app/main .
 
-# Create non-root user
-RUN adduser -D -H -u 10001 app && chown -R app:app /app
-USER app
+# Expose backend port (change if your app uses another)
+EXPOSE 8080
 
-# Set the MongoDB connection URI
-ENV MONGODB_URI=mongodb://localhost:27017
+# Add Health Check for your app
+# Make sure your app has an endpoint like `/health` or `/ping`
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1
 
-# Copy the built binary and seed.json
-COPY --from=builder /app/main /app/main
-# COPY --from=builder /app/seed.json /app/seed.json
-
-# Expose the port the app runs on (informational)
-EXPOSE 3000
-
-# Command to run the application
-# CMD [ "pwd" ]
-# RUN pwd
-ENTRYPOINT ["/app/main"]
+# Run the binary
+CMD ["./main"]

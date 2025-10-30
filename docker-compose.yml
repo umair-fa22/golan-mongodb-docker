@@ -1,33 +1,37 @@
-# version: '3.8'
+version: "3.9"
 
 services:
-  app:
+  backend:
     build: .
+    container_name: go-backend
     ports:
-      - "3000:3000"
-    environment:
-      - MONGODB_URI=mongodb://db:27017
+      - "8080:8080"
     depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/db-check"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - mongodb
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/devopsdb
+      - PORT=8080
+    networks:
+      - devops-net
 
-  db:
-    image: mongo:latest
-    command: --auth
+  mongodb:
+    image: mongo:6.0
+    container_name: mongo
+    restart: always
     ports:
       - "27017:27017"
     volumes:
-      - mongo-data:/data/db
+      - mongo_data:/data/db
+    networks:
+      - devops-net
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+networks:
+  devops-net:
+
 volumes:
-  mongo-data:
+  mongo_data:
