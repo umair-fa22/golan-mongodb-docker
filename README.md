@@ -202,7 +202,7 @@ docker build -t <yourname>/golan-mongodb-docker:local .
 Run the image (make sure MongoDB is reachable from inside the container or set MONGODB_URI to a network-accessible Mongo):
 
 ```powershell
-docker run --rm -e MONGODB_URI="mongodb://host.docker.internal:27017" -p 8080:8080 <yourname>/golan-mongodb-docker:local
+docker run --rm -e MONGODB_URI="mongodb://host.docker.internal:27017" -p 8080:8080 umair-fa22/golan-mongodb-docker:local
 ```
 
 Docker Compose (recommended for local dev)
